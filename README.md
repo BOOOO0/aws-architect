@@ -413,3 +413,7 @@ API 기반의 퍼블릭 클라우드
 - API Gateway를 생성해서 생성한 Lambda의 API를 밖으로 내보낼 수 있다.
 
 - 서버리스로 Lambda에 코드만 작성하고 API Gateway를 사용해서 API URL을 만들어내고 그 API URL을 어디서나 접근할 수 있도록 배포할 수 있다.
+
+## 실습
+
+- Session Manager를 사용하면 방화벽 또는 Amazon VPC 보안 그룹에서 SSH 포트를 노출하지 않고도 Amazon EC2 인스턴스에 연결할 수 있습니다. 자세한 내용은 AWS Systems Manager Session Manager를 참조하십시오.
