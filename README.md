@@ -826,6 +826,378 @@ API 기반의 퍼블릭 클라우드
 
 - 예측 스케일링은 어떤 경우고 어떻게 이루어지는지 다시 ----------------------------------
 
+# 실습
+
+```bash
+#!/bin/bash
+yum -y update
+
+# Install and enable AWS Systems Manager Agent
+cd /tmp
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
+
+# Install Apache Web Server and PHP
+yum install -y httpd mysql
+amazon-linux-extras install -y php7.2
+
+# Download Inventory App Lab files
+wget https://ap-northeast-2-tcprod.s3.ap-northeast-2.amazonaws.com/courses/ILT-TF-200-ARCHIT/v7.5.7.prod-05282af8/lab-4-HA/scripts/inventory-app.zip
+unzip inventory-app.zip -d /var/www/html/
+
+# Download and install the AWS SDK for PHP
+wget https://github.com/aws/aws-sdk-php/releases/download/3.62.3/aws.zip
+unzip -q aws.zip -d /var/www/html
+
+# Load Amazon Aurora DB connection details from AWS CloudFormation
+un="dbadmin"
+pw="lab-password"
+ep="inventory-cluster.cluster-coio6lz1nluf.ap-northeast-2.rds.amazonaws.com"
+db="inventory"
+#mysql -u $un -p$pw -h $ep $db < /var/www/html/sql/inventory.sql
+
+# Populate PHP app settings with DB info
+sed -i "s/DBENDPOINT/$ep/g" /var/www/html/get-parameters.php
+sed -i "s/DBNAME/$db/g" /var/www/html/get-parameters.php
+sed -i "s/DBUSERNAME/$un/g" /var/www/html/get-parameters.php
+sed -i "s/DBPASSWORD/$pw/g" /var/www/html/get-parameters.php
+
+# Turn on web server
+systemctl start httpd.service
+systemctl enable httpd.service
+```
+
+- 오토 스케일링을 준비하기 전 현 인프라의 서버, DB, 로드밸런서의 타겟 등을 확인한다.
+
+- create dynamic scaling policy로 어떤 기준으로 자동 증설을 하게 할 것인지
+
+- 설정한 후 stress 명령어로 증설 확인
+
 </div>
+
+</details>
+
+<details><summary>3일차</summary>
+
+<div markdown="1">
+
+# 자동화
+
+- AWS에서는 IaC 툴로 CloudFormation을 제공한다.
+
+## IaC
+
+- API 기반 퍼블릭 클라우드이기 때문에 코드로 인프라를 다룰 수 있다.
+
+- 템플릿을 만들어 두고 그 템플릿에 맞게 리소스를 STACK이라는 단위로 한번에 생성해서 배포한다.
+
+- Parameter 항목에서 정보 입력하고
+
+- Resources 항목에서 생성할 리소스 작성하고 파라미터를 참조하도록 작성
+
+## CDK
+
+- CloudFormation보다 쉽게 프로그래밍 언어를 사용해서 인프라를 다루는 방식
+
+## AWS Elastic Beanstalk
+
+- Pass 서비스로 어플리케이션만 올리면 서비스가 배포가 가능
+
+## AWS System Manager
+
+- 규정을 준수했는지를 하나하나 모든 계정의 콘솔에 들어가서 확인할 수 없다.
+
+- 규정 준수, 어플리케이션 배포가 잘 되어있는지 구성 관리, 시스템 모니터링 등이 가능하다.
+
+- AWS SysOps 과정에서 많이 다룬다고 한다.
+
+## CodeWhisper
+
+- 코파일럿같은 코드 자동완성 AI인데 고객의 데이터로 학습하지 않고 AWS에서만 학습하기 때문에 안전하다고 한다.
+
+# 컨테이너
+
+## MSA
+
+- MSA의 탄생 배경인지 아니면 설명을 위한건지 모르겠지만 일단 쓴다.
+
+- 강한 결합과 느슨한 결합의 차이가 일단 기반에 있는 것 같다. 모든 인스턴스가 서로 연결을 직접 하는 경우 서버 하나 없어지던 생기던 크게 영향받는데 이걸 가운데 LB 두고 유연하게 처리하는 내용
+
+- 그리고 모놀리식과 MSA의 차이 모놀리식이야 뭐 모든 API와 서비스들이 하나로 묶여서 하나의 규칙을 준수하는 것
+
+- MSA는 하나의 큰 서비스를 API를 기준으로 여러 단위로 나눠서 서로 격리되어 있지만 모여서 하나의 서비스인 것 각자 자기 팀의 언어 사용 가능하고 각자의 규칙을 준수 가능
+
+---
+
+- 컨테이너가 이식성을 가지는 이유 런타임, 코드 등 실행 환경까지 가지고 있기 때문
+
+## 컨테이너의 실행
+
+- 이미지의 등록은 AWS ECR에 한다.
+
+- 오케스트레이션 도구로는 EKS, ECS가 있다.
+
+- EKS가 Control Plane으로서의 역할을 하며 EC2를 생성하고 그 안에 컨테이너를 실행하도록 한다.
+
+- 직접 서버를 관리하지 않고 컨테이너를 실행시키고 싶다는 요구가 있었고 서버리스 컨테이너 서비스 Fargate가 생겼고 로그나 다른 정보는 고객에게 보내고 관리는 AWS에서 한다.
+
+- 보통 웹서비스에서 컨테이너 30개 정도 사용하기 때문에 ECS를 사용해도 되지만 트렌드가 K8S기 때문에 EKS 사용이 많다.
+
+- MLB.com이 ECS만을 사용해서 컨테이너를 운영했다고 한다.
+
+- ECS는 비용이 없다는디? EC2값만 내는가봄
+
+## K8S
+
+- Control Plane/Data Plane으로 영역이 나뉜다.
+
+- etcd가 내가 운영하는 쿠버네티스 전 영역에 대한 데이터베이스이다.
+
+- 직접 쿠버네티스를 서버에 설치하는 과정에서 트러블 슈팅이 필요한 경우가 생기기도 하고 번거롭기 때문에 쿠버네티스 클러스터가 프로비저닝 되는 EKS가 많이 사용된다.
+
+- 비쌈
+
+## Fargate
+
+- EC2 내에서 비는 공간이 많다면 Fargate가 낫지 않냐 근데 1.25배 정도 더 비싸다.
+
+- 상황에 맞게 선택 근데 그냥 EC2 쓰지 않을까?
+
+---
+
+# ECS, EKS Workshop
+
+- 샘플 어플리케이션을 EKS, ECS 등을 사용해서 배포하는 실습해볼 수 있다.
+
+- EKS는 국문 자료가 제공된다.
+
+- **_꿀맛 ㅋㅋ_**
+
+---
+
+# 하이브리드 네트워킹
+
+- DynamoDB를 사용한다면 그건 리전에 있고 내 VPC 내에 있지는 않다.
+
+- 원래는 NAT 생성하고 IGW 지나서 접근해야 하는데
+
+- VPC 엔드포인트를 사용하면 프라이빗 서브넷의 프라이빗 서버가 DynamoDB로 바로 접근할 수 있다.
+
+- 엔드포인트는 알아서 크기가 조정이 된다. 많이 접근하면 알아서 확장된다고 한다.
+
+- 게이트웨이 엔드포인트, 인터페이스 엔드포인트가 있다.
+
+- 게이트웨이 엔드포인트는 S3, DynamoDB만 지원한다.
+
+- 최근엔 S3도 인터페이스 엔드포인트를 사용이 가능하다.
+
+- 엔드포인트는 네트워크 인터페이스가 하나 생기는 것
+
+- 서브넷에 붙여서 생성하면 되고 사용하는 데에는 그냥 DynamoDB 호출하거나 S3 호출하면 접근이 가능하다고 한다.
+
+# VPC 피어링
+
+- 복수의 서로 다른 VPC를 연결하는 것
+
+- VPC간 통신을 하려면 IGW를 통해 돌아서 통신을 해야 하지만 Private하게 연결하는 것이 VPC 피어링
+
+- 리전이 달라도 계정이 달라도 연결이 가능하다.
+
+- **_대신 두 VPC의 IP 대역은 겹쳐서는 안된다._**
+
+- 피어링 한 후 서로가 서로를 라우팅하면 마무리 된다? 라우팅 테이블에 명시가 자동으로 된다?
+
+- 다중 VPC 피어링이라면 A - B - C 면 A - C 도 연결해줘야 서로 다 통신이 된다. (풀 메쉬 형태)
+
+- 적은 수의 VPC를 서로 연결할 때 VPC 피어링을 맺는다.
+
+# Site to Site VPN
+
+- VPC 피어링보다 사설망 간 프라이빗 통신을 하는 정석적인 방법은 VPN 연결이다.
+
+- 온프레미스 <-> 퍼블릭에서 VPN으로 연결해서 하이브리드 클라우드 구축
+
+- 고객 온프레미스에 물리적 장비에 대한 정보를 입력하면 그에 맞는 게이트웨이가 생성되고 연결이 된다.
+
+- VPN의 최대 Throughput은 1.25Gbps이다.
+
+# Direct Connect
+
+- 광케이블로 물리적 연결을 하는 서비스이다.
+
+- AWS 데이터 센터 위치는 공개되지 않았는데 Direct Connect 로케이션이라는 중립지대 같은 곳에 고객 케이지에 고객 라우터를 설치하고 AWS 케이지에 AWS 라우터가 있다.
+
+- 그 고객 라우터랑 고객의 온프레미스 데이터 센터랑 유선 연결을 한다.
+
+- 가산 KINX, 평촌 LG U+, ICN10의 데이터 센터가 이 다이렉트 커넥트 로케이션이다. 100Gbps 까지 지원한다.
+
+- AWS Direct Connect 서비스로 문의하면 저기 데이터 센터에서 처리를 해준다.
+
+- 처리해주고 소프트웨어적 매뉴얼이 주어지고 그대로 하면 연결이 된다.
+
+- 그럼 이중화는 어떻게? 하나는 Direct Connect, 하나는 VPN으로 백업 연결
+
+- 중요한 비즈니스의 경우 이중화도 Direct Connect, 백업 VPN도 또 연결한다고 한다.
+
+- VPN은 네트워크간 통신 가능한 연결 직후부터 Direct Connect는 유선 포트 꽂은 그 순간부터 비용 발생
+
+# Transit Gateway
+
+- 위 처럼 연결하면 발생하는 문제인 너무 많아지는 라우팅 테이블을 어떻게 관리할 것인가에 대한 해답
+
+- 허브를 사용하는 것 처럼 Transit Gateway가 허브 역할을 하며 트래픽을 다 받아서 퍼블릭 클라우드 내 리소스로 전달
+
+- 모든 VPC를 연결할 수도 있고 필요한 만큼만 연결해서 사용할 수도 있다.
+
+# 서버리스
+
+- 서버리스 컴퓨팅 뿐만 아니라 완전관리형 모든 서버리스 서비스들을 통칭한다.
+
+## API Gateway
+
+- 어플리케이션을 위한 진입점을 URL로 제공한다.
+
+- 초당 수천건의 API 요청을 처리할 수 있다.
+
+## SQS (Simple Queue Service)
+
+- 프로세스간 메시지 서비스라는데 IPC를 가능하게 하는건가?
+
+- 아마 Lambda는 하나의 요청 처리를 위한 하나의 프로세스인데 그 Lambda가 여러개고 서로 통신이 필요하다면 이걸 사용??
+
+- 일단 생산자-소비자 관계의 IPC개념은 맞다
+
+- 근데 앞에 생산자 역할의 App 서버들이 있고 그걸 처리하는 소비자 App들이 있는데 그 사이에 메세지를 보내는 부분의 대기열을 제공한다는 의미인듯 하다.
+
+- 전해지지 못한 메세지는 DLQ에 저장되고 처리되지 못한 부분만 확인하면 되게 해주는 서비스라고 한다.
+
+- FIFO, Standard 방식으로 나뉜다.
+
+- Standard 방식은 어떻게 처리한다는 말인지 몰겠음
+
+- 생성된 메세지 큐의 크기는 자동으로 조정된다.
+
+- 큐의 가중치를 구분해서 더 느린 요청엔 낮은 성능으로 처리할 수 있다.
+
+- SQS 서버가 메모리 버퍼 역할을 하고 메세지를 가지고 소비자에게 전달하는 방식?
+
+- 짧은 폴링은 분산된 SQS 서버들을 오고 가는 인터벌이 짧은 것 긴 폴링은 그 반대
+
+## SNS
+
+- 게임사에서 전체 공지를 푸시 알림으로 정해진 시간에 보낼때도 사용할 수 있다는듯?
+
+- 정확한 용도는 메세지를 다수에게 보내는 용도
+
+- Slack, SMS, Mail 등 여러 매체에 메세지를 보낼 수 있다.
+
+- 문자 메세지 API를 이용해서 Lambda에 보내는 코드를 작성하고 SNS에 연결해서 트리거가 발동하면 보내지도록 할 수도 있다.
+
+## SNS vs SQS
+
+- 수동적, 능동적
+
+- 지속성 있음, 지속성 없음
+
+# Kinesis
+
+- 분석을 위한 데이터 스트림을 수집하고 저장
+
+- Kinesis Data Streams -> Kinesis Data Firehose 까지 가면 시간이 늦으니까 Kinesis Data Analytics를 사용한다.
+
+- ㅋㅋ 그냥 이건 넘기겠음 ㅋㅋ
+
+# Step Functions
+
+- 어플리케이션을 워크플로로 기능을 단계별로 나누는 서비스이다.
+
+- 기능을 단계별로 나눠서 실행하고 테스트할 수 있다.
+
+- 단계별로 추적이 가능하게 해준다.
+
+- 워크플로 예시는 데이터베이스가 트랜잭션에 성공했을때 아닐때를 나눠서 다른 작업을 하도록 할 수 있다? 이렇게 해서 결과에 따라 어느 부분에서 문제가 있어서 이런 결과가 나왔는지 추적이 가능하다???
+
+# 실습 서버리스 아키텍처
+
+# 엣지 서비스
+
+- Route 53 DNS, CloudFront CDN 등의 서비스로 고객이 필요로 하는 모든 위치에서 클라우드를 제공한다는 의의
+
+- DDOS 방어 Shield 보안 솔루션도 제공
+
+- 엣지 로케이션에서 실행하는 서비스의 방화벽?? AWS WAF
+
+## Route 53
+
+- 가지고 있는 도메인을 등록해서 사용하고 다양한 기능 제공
+
+- 구매한 도메인을 Route 53에 등록하고 주는 4개의 네임서버를 도메인 판매 사이트에다가 등록해서 네임서버 변경
+
+- 근데 라우팅 방식이 많은데 아마 다양한 리전에 서비스가 위치해있고 더 나은 처리 방법에 대한 방법론들인듯하다
+
+### 단순 라우팅
+
+- 그냥 요청 시 마다 여기 리전 보내고 다음 리전 보내고
+
+### 장애 조치 라우팅
+
+- 연결된 로드밸런서의 상태를 확인해보면서 멀쩡한 곳으로 보냄
+
+### 지리적 위치 라우팅
+
+- 유럽 사용자는 유럽리전으로 라우팅, 미국 사용자는 미국리전으로 라우팅
+
+### 가중치 기반 라우팅
+
+- 트래픽의 비율을 기준으로 가중치를 측정한다.
+
+## Contents Delivery Network
+
+- CloudFront
+
+- S3 버킷에서 바로 전달되도록 할 수도 있고 로드밸런서를 엣지 로케이션에다 두고서 사용할 수도 있고 여러가지 방법
+
+- 이제 더는 못하겠어 ㅜ.ㅜ
+
+# DDOS
+
+- AWS는 DDOS알아서 버틴다는데? 어케한거
+
+- DDOS는 7, 6, 4, 3계층을 대상으로 공격이 있다.
+
+- 뭐 설명할라고 꺼낸 부분인지 모르겠음
+
+# Shield
+
+- AWS Shield는 L7에는 HTTP Flood, DNS Query Flood에 대한 방어 제공
+
+- L6에는 SSL 부정 사용 방어
+
+- L4에는 SYN FLOOD
+
+- L3에는 UDP 리플렉션? 이건 뭔지 모름
+
+# WAF Web Application Firewall
+
+- CloudFront, ALB 등 서비스에다가 붙여서 방화벽 역할을 하게 한다.
+
+---
+
+- 위 내용 부족하게 정리했는데 이거 자료에 복원력 참조 아키텍처로 활용 예시 설명 가능할듯
+
+- 서비스 앞단에 CloudFront도 Route53도 WAF도 다 붙여놓고 WAF에서 CloudFront로 오는 요청 한번 검수? 그러고 통과한거를 VPC 안 로드밸런서로 보내는듯 하다.
+
+# AWS Outposts
+
+- 온프레미스 데이터센터에 AWS에서 온 장비 들여서 쓰는 거 ㅋㅋ
+</div>
+
+---
+
+# 재해 복구
+
+- 재해 복구는 지금 문제가 생긴 데이터 센터의 데이터를 백업하는 의미인듯하다.
+
+-
 
 </details>
